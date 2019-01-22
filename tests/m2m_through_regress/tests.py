@@ -1,9 +1,8 @@
-from __future__ import unicode_literals
+from io import StringIO
 
 from django.contrib.auth.models import User
 from django.core import management
 from django.test import TestCase
-from django.utils.six import StringIO
 
 from .models import (
     Car, CarDriver, Driver, Group, Membership, Person, UserMembership,
@@ -47,32 +46,6 @@ class M2MThroughTestCase(TestCase):
                 "<Person: Bob>",
             ]
         )
-
-    def test_cannot_use_setattr_on_reverse_m2m_with_intermediary_model(self):
-        msg = (
-            "Cannot set values on a ManyToManyField which specifies an "
-            "intermediary model. Use m2m_through_regress.Membership's Manager "
-            "instead."
-        )
-        with self.assertRaisesMessage(AttributeError, msg):
-            self.bob.group_set.set([])
-
-    def test_cannot_use_setattr_on_forward_m2m_with_intermediary_model(self):
-        msg = (
-            "Cannot set values on a ManyToManyField which specifies an "
-            "intermediary model. Use m2m_through_regress.Membership's Manager "
-            "instead."
-        )
-        with self.assertRaisesMessage(AttributeError, msg):
-            self.roll.members.set([])
-
-    def test_cannot_use_create_on_m2m_with_intermediary_model(self):
-        with self.assertRaises(AttributeError):
-            self.rock.members.create(name="Anne")
-
-    def test_cannot_use_create_on_reverse_m2m_with_intermediary_model(self):
-        with self.assertRaises(AttributeError):
-            self.bob.group_set.create(name="Funk")
 
     def test_retrieve_reverse_m2m_items_via_custom_id_intermediary(self):
         self.assertQuerysetEqual(
@@ -151,18 +124,19 @@ class M2MThroughSerializationTestCase(TestCase):
 
 
 class ToFieldThroughTests(TestCase):
-    def setUp(self):
-        self.car = Car.objects.create(make="Toyota")
-        self.driver = Driver.objects.create(name="Ryan Briscoe")
-        CarDriver.objects.create(car=self.car, driver=self.driver)
+    @classmethod
+    def setUpTestData(cls):
+        cls.car = Car.objects.create(make="Toyota")
+        cls.driver = Driver.objects.create(name="Ryan Briscoe")
+        CarDriver.objects.create(car=cls.car, driver=cls.driver)
         # We are testing if wrong objects get deleted due to using wrong
         # field value in m2m queries. So, it is essential that the pk
         # numberings do not match.
         # Create one intentionally unused driver to mix up the autonumbering
-        self.unused_driver = Driver.objects.create(name="Barney Gumble")
+        cls.unused_driver = Driver.objects.create(name="Barney Gumble")
         # And two intentionally unused cars.
-        self.unused_car1 = Car.objects.create(make="Trabant")
-        self.unused_car2 = Car.objects.create(make="Wartburg")
+        cls.unused_car1 = Car.objects.create(make="Trabant")
+        cls.unused_car2 = Car.objects.create(make="Wartburg")
 
     def test_to_field(self):
         self.assertQuerysetEqual(
@@ -203,14 +177,27 @@ class ToFieldThroughTests(TestCase):
             ["<Driver: Barney Gumble>", "<Driver: Ryan Briscoe>"]
         )
 
-    def test_add_null(self):
-        nullcar = Car.objects.create(make=None)
-        with self.assertRaises(ValueError):
-            nullcar.drivers._add_items('car', 'driver', self.unused_driver)
+    def test_m2m_relations_unusable_on_null_to_field(self):
+        nullcar = Car(make=None)
+        msg = (
+            '"<Car: None>" needs to have a value for field "make" before this '
+            'many-to-many relationship can be used.'
+        )
+        with self.assertRaisesMessage(ValueError, msg):
+            nullcar.drivers.all()
+
+    def test_m2m_relations_unusable_on_null_pk_obj(self):
+        msg = (
+            "'Car' instance needs to have a primary key value before a "
+            "many-to-many relationship can be used."
+        )
+        with self.assertRaisesMessage(ValueError, msg):
+            Car(make='Ford').drivers.all()
 
     def test_add_related_null(self):
         nulldriver = Driver.objects.create(name=None)
-        with self.assertRaises(ValueError):
+        msg = 'Cannot add "<Driver: None>": the value for field "driver" is None'
+        with self.assertRaisesMessage(ValueError, msg):
             self.car.drivers._add_items('car', 'driver', nulldriver)
 
     def test_add_reverse(self):
@@ -228,12 +215,17 @@ class ToFieldThroughTests(TestCase):
 
     def test_add_null_reverse(self):
         nullcar = Car.objects.create(make=None)
-        with self.assertRaises(ValueError):
+        msg = 'Cannot add "<Car: None>": the value for field "car" is None'
+        with self.assertRaisesMessage(ValueError, msg):
             self.driver.car_set._add_items('driver', 'car', nullcar)
 
     def test_add_null_reverse_related(self):
         nulldriver = Driver.objects.create(name=None)
-        with self.assertRaises(ValueError):
+        msg = (
+            '"<Driver: None>" needs to have a value for field "name" before '
+            'this many-to-many relationship can be used.'
+        )
+        with self.assertRaisesMessage(ValueError, msg):
             nulldriver.car_set._add_items('driver', 'car', self.car)
 
     def test_remove(self):

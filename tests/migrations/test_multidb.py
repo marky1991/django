@@ -1,18 +1,11 @@
-import unittest
-
 from django.db import connection, migrations, models
 from django.db.migrations.state import ProjectState
 from django.test import override_settings
 
 from .test_operations import OperationTestBase
 
-try:
-    import sqlparse
-except ImportError:
-    sqlparse = None
 
-
-class AgnosticRouter(object):
+class AgnosticRouter:
     """
     A router that doesn't have an opinion regarding migrating.
     """
@@ -20,7 +13,7 @@ class AgnosticRouter(object):
         return None
 
 
-class MigrateNothingRouter(object):
+class MigrateNothingRouter:
     """
     A router that doesn't allow migrating.
     """
@@ -28,7 +21,7 @@ class MigrateNothingRouter(object):
         return False
 
 
-class MigrateEverythingRouter(object):
+class MigrateEverythingRouter:
     """
     A router that always allows migrating.
     """
@@ -36,7 +29,7 @@ class MigrateEverythingRouter(object):
         return True
 
 
-class MigrateWhenFooRouter(object):
+class MigrateWhenFooRouter:
     """
     A router that allows migrating depending on a hint.
     """
@@ -45,7 +38,7 @@ class MigrateWhenFooRouter(object):
 
 
 class MultiDBOperationTests(OperationTestBase):
-    multi_db = True
+    databases = {'default', 'other'}
 
     def _test_create_model(self, app_label, should_run):
         """
@@ -128,12 +121,10 @@ class MultiDBOperationTests(OperationTestBase):
         else:
             self.assertEqual(Pony.objects.count(), 0)
 
-    @unittest.skipIf(sqlparse is None and connection.features.requires_sqlparse_for_splitting, "Missing sqlparse")
     @override_settings(DATABASE_ROUTERS=[MigrateNothingRouter()])
     def test_run_sql(self):
         self._test_run_sql("test_mltdb_runsql", should_run=False)
 
-    @unittest.skipIf(sqlparse is None and connection.features.requires_sqlparse_for_splitting, "Missing sqlparse")
     @override_settings(DATABASE_ROUTERS=[MigrateWhenFooRouter()])
     def test_run_sql2(self):
         self._test_run_sql("test_mltdb_runsql2", should_run=False)
